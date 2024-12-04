@@ -1,4 +1,4 @@
-# drrrkb
+# srb2kb-revived
 Server browser for SRB2Kart
 
 To run this, first install the required packages:
