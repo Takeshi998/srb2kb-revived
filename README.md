@@ -1,4 +1,4 @@
-# srb2kb-revived
+# srb2kb
 Server browser for SRB2Kart
 
 To run this, first install the required packages:
@@ -15,6 +15,3 @@ SRB2KB is essentially a rewrite of the PHP Web Server Browser.
 
 ## Usage
 You're free to use this application to host your own server browser. Would be cool if you would let us know whether this code was of any use to you! :)
-
-## Credits to
-Goulart,NielsjeNL and Lugent for Fix this script,will be constantly updated!
