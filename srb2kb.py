@@ -1,4 +1,5 @@
 # import funny stuff
+import traceback
 from flask import Flask, jsonify, render_template
 import srb2kpacket
 import requests
@@ -41,6 +42,7 @@ allServerAddons = {}
 allServerAddonsSorted = {}
 curDateTime = ""
 serverCounter = 1
+masterServerURL = "https://ms.kartkrew.org/ms/api/games/SRB2Kart/10/servers?v=2.2"
 
 # --- flask webapp ---
 # include some other routes to prevent link rot/be more flexible/insert dumb reason
@@ -53,16 +55,20 @@ def srb2kart_browser():
     # otherwise import some empty data
     if len(allServerInfo) == 0:
         serverInfo = {  
-                        'servername': 'EMPTY',
-                        'gametype': 'EMPTY',
+                        'servername': 'Empty',
+                        'gametype': 'Empty',
                         'players': {
                             'count': 0,
                             'max': 0
                             },
-                        'ip': 'EMPTY',
-                        'port': '5029'
+                        'ip': '',
+                        'port': '',
+                        'level': {
+                            'title': 'Empty'
+                            }
                         }
         allServerInfo.append(serverInfo)
+        allServerFlags[serverInfo['ip']] = ['Unknown', 'XX', "", "   "]
     # TODO: also add allServerFlags info
     
     # serve the page
@@ -80,8 +86,8 @@ def updateServers():
     """"Update the allServerInfo list with data from all kart servers. List of kart servers retrieved from the default master server."""
     # first get a list of all servers from the master server
     try:
-        print("Getting list of servers from https://ms.kartkrew.org/ms/api/games/SRB2Kart/7/servers?v=2")
-        msData = requests.get("https://ms.kartkrew.org/ms/api/games/SRB2Kart/7/servers?v=2")
+        print("Getting list of servers from " + masterServerURL)
+        msData = requests.get(masterServerURL)
     except:
         print("Could not get master server data. Not updating server information.")
         return
@@ -194,20 +200,21 @@ def appendServerInfo(ip='10.0.0.26', port='5029', contact=''):
 
     # XD
     except:
+        #traceback.print_exc()
         if parsedArgs.verbose: print(str("|{:<26}|{:<64}|").format(str(f" {ip}:{port}"), " NOT REACHABLE"))
         
         serverInfo = {  
-                    'servername': '<img src="https://srb2kart.aqua.fyi/images/picardydown.png" alt="Unreachable server" style="width: 24px; height: 18px;" /> Could not connect',
+                    'servername': 'Unreachable Server',
                     'gametype': '-',
                     'players': {
                         'count': 0,
                         'max': 0
                         },
-                    'kartspeed': 'None',
+                    'gamespeed': '-',
                     'ip': ip,
                     'port': port,
                     'level': {
-                        'title': 'EMPTY LAND ZONE'
+                        'title': 'None'
                         }
                     }
         
@@ -268,11 +275,10 @@ print(r"""
 
 if parsedArgs.verbose == False:
     print("NOTE: Verbose information disabled. Individual server checks won't be shown. Enable these with -v as launch argument.\n")
+app.run(host='0.0.0.0', port=parsedArgs.port)
 
 # update servers ourself for a first time so we can display at least SOMETHING
-updateServers()
 #appendServerInfo()
 #print("Done")
 # start running the flask server
 # flask is being run as a development server like this. works fine for our purposes though
-app.run(host='0.0.0.0', port=parsedArgs.port)

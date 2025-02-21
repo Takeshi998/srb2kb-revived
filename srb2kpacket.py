@@ -93,7 +93,6 @@ class SRB2K:
     SV_SPEEDMASK       = 0x03
     SV_LOTSOFADDONS    = 0x20
     SV_DEDICATED       = 0x40
-    SV_PASSWORD        = 0x80
     NETFIL_WONTSEND    = 32
     NETFIL_WILLSEND    = 16
     pkformats = {
@@ -109,7 +108,7 @@ class SRB2K:
             'Bgametype/'       +
             'Bmodifiedgame/'   +
             'Bcheatsenabled/'  +
-            'Bisdedicated/'    +
+            'Bkartvars/'       +
             'Bfileneedednum/'  +
             'Itime/'           +
             'Ileveltime/'      +
@@ -183,7 +182,7 @@ class SRB2K:
         return maptitle.strip()
 
     def Unkartvars (self, info, pk):
-        c = pk['isdedicated']
+        c = pk['kartvars']
 
         self.lotsofaddons = bool( c & self.SV_LOTSOFADDONS )
         info['lotsofaddons'] = bool(self.lotsofaddons)
@@ -195,9 +194,8 @@ class SRB2K:
                 'Hard',
             ]
             speed = speeds[( c & self.SV_SPEEDMASK )]
-            info['kartspeed'] = ( speed if speed else 'Too fast' )
+            info['gamespeed'] = ( speed if speed else 'Too fast' )
         info['dedicated'] = bool( c & self.SV_DEDICATED )
-        info['password-protected'] = bool( c & self.SV_PASSWORD  )
 
     def Checksum(self, p, l):
         n = len(p) - l
@@ -234,26 +232,27 @@ class SRB2K:
         p = p[0]
         n = len(p)
         if (n < 8): # Header
-            print('header')
+            #print('header')
             return False
         if (self.bytes_to_int(p[:4]) != self.Checksum(p, 4)): # Checksum mismatch
-            print('bad checksum')
+            #print('bad checksum')
             return False
         self.pk['type'] = ord(chr(p[6]))
         if (self.pk['type'] != type):
-            print('line 214')
+            #print('line 214')
             return False
         pkf = self.pkformats[self.pk['type']]
         if not pkf:
-            print('line 218')
+            #print('line 218')
             return False
         if (n < pkf['minimum']):
-            print('smaller than minimum')
+            #print('smaller than minimum')
             return False
         self.pk['buffer'] = p[8:]
         if (unpk):
             self.pk = {**self.pk, **self.Unpk(self.pk)}
             del self.pk['buffer']
+        #print(self.pk)
         return self.pk
 
     def Unfileneeded (self, fileinfo, fileneedednum, fileneeded):
@@ -311,7 +310,7 @@ class SRB2K:
         else:
             return True
 
-    def SetRetries (n):
+    def SetRetries (self,n):
         self.retries = n
 
     def Close (self):
@@ -344,7 +343,7 @@ class SRB2K:
         #}
         #else
         #{
-        #    copy_bool(t['dedicated'], pk['isdedicated'])
+        #    copy_bool(t['dedicated'], pk['kartvars'])
         #    lotsofaddons = FALSE
         #}
 
@@ -354,6 +353,7 @@ class SRB2K:
             'minor': version % 100,
             'patch': subversion,
         }
+        t['packetversion'] = self.pk['packetversion']
         t['version']['name'] = self.pk['application']
 
         t['servername'] = self.pk['servername']
@@ -363,9 +363,21 @@ class SRB2K:
             'max': self.pk['maxplayer'],
         }
         t['gametype'] = 'Unknown'
-        if self.pk['gametype'] == 2: t['gametype'] = 'Race'
-        elif self.pk['gametype'] == 3: t['gametype'] = 'Battle'
+        if self.pk['gametype'] == 2:
+            t['gametype'] = 'Race'
+        elif self.pk['gametype'] == 3:
+            t['gametype'] = 'Battle'
         #t['gametype'] = pk['gametype']
+
+        t['client'] = "unknown"
+        t['clientName'] = "Unknown"
+        match t['packetversion']:
+            case 0:
+                t['client'] = "vanilla"
+                t['clientName'] = "Vanilla"
+            case 1:
+                t['client'] = "neptune"
+                t['clientName'] = "Neptune"
 
 
         t['mods'] =   bool(self.pk['modifiedgame'])
@@ -378,8 +390,10 @@ class SRB2K:
             'md5sum' : self.pk['mapmd5'].hex(),
         }
 
-        if str(self.pk['httpsource'][-1:]) != '/': t['httpsource'] = self.pk['httpsource']+'/'    
-        else: t['httpsource'] = self.pk['httpsource']
+        if str(self.pk['httpsource'][-1:]) != '/':
+            t['httpsource'] = self.pk['httpsource'] + '/'    
+        else:
+            t['httpsource'] = self.pk['httpsource']
 
         info = t
         del t
@@ -403,14 +417,28 @@ class SRB2K:
             if not self.pk:
                 break
             if (self.pk['node'] < 255):
-                t['name']    = self.pk['name']
+                t['name'] = self.pk['name']
+
                 team = teams[self.pk['team']]
-                t['team']    = ( team if team else 'Unknown' )
-                t['rank' if (version == 100 or version == 110)
-                     else 'score' ] = self.pk['score']
+                t['team'] = (team if team else 'Unknown')
+                t['score'] = self.pk['score']
+                t['skin'] = self.pk['skin']
                 t['seconds'] = self.pk['timeinserver']
 
+                time = int(t['seconds'])
+                seconds = time % 60
+                minutes = (time / 60) % 60
+                hours = (time / 60) / 60
+                t['time'] = "{:02d}:{:02d}:{:02d}".format(round(hours), round(minutes), round(seconds))
+
                 info['players']['list'].append(t)
+
+            info['players']['list'].sort(reverse = True, key = self.SortPlayers)
+
+            rank = 1
+            for player in info['players']['list']:
+                player['rank'] = rank
+                rank += 1
 
         return info
 
@@ -433,6 +461,9 @@ class SRB2K:
                 start += self.pk['num']
                 fileinfo = self.Unfileneeded(fileinfo, self.pk['num'], self.pk['files'])
         return fileinfo
+    
+    def SortPlayers(self, element):
+        return element['score']
 
     def Colorize (self,s) :
         #Probably not the pinnacle of performance.
